@@ -26,6 +26,9 @@ CUDA_ARCH := -gencode arch=compute_20,code=sm_20 \
 		-gencode arch=compute_50,code=sm_50 \
 		-gencode arch=compute_50,code=compute_50
 
+# Uncomment to use Eigen. Enable Eigen will set CPU_ONLY := 1 and invalidate BLAS settings
+# USE_EIGEN := 1
+
 # BLAS choice:
 # atlas for ATLAS (default)
 # mkl for MKL

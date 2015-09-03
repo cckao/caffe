@@ -24,6 +24,10 @@ else
 	OTHER_BUILD_DIR := $(DEBUG_BUILD_DIR)
 endif
 
+ifeq ($(USE_EIGEN), 1)
+	CPU_ONLY := 1
+endif
+
 # All of the directories containing code.
 SRC_DIRS := $(shell find * -type d -exec bash -c "find {} -maxdepth 1 \
 	\( -name '*.cpp' -o -name '*.proto' \) | grep -q ." \; -print)
@@ -38,6 +42,13 @@ DYNAMIC_NAME := $(LIB_BUILD_DIR)/lib$(PROJECT).so
 ##############################
 # CXX_SRCS are the source files excluding the test ones.
 CXX_SRCS := $(shell find src/$(PROJECT) ! -name "test_*.cpp" -name "*.cpp")
+# Select an implementation of math functions
+ifeq ($(USE_EIGEN), 1)
+	EXCLUDES_CXX := src/caffe/util/math_functions.cpp
+else
+	EXCLUDES_CXX := src/caffe/util/math_functions_eigen.cpp
+endif
+CXX_SRCS := $(filter-out $(EXCLUDES_CXX), $(CXX_SRCS))
 # CU_SRCS are the cuda source files
 CU_SRCS := $(shell find src/$(PROJECT) ! -name "test_*.cu" -name "*.cu")
 # TEST_SRCS are the test source files
@@ -306,41 +317,45 @@ ifeq ($(WITH_PYTHON_LAYER), 1)
 	LIBRARIES += $(PYTHON_LIBRARIES)
 endif
 
-# BLAS configuration (default = ATLAS)
-BLAS ?= atlas
-ifeq ($(BLAS), mkl)
-	# MKL
-	LIBRARIES += mkl_rt
-	COMMON_FLAGS += -DUSE_MKL
-	MKL_DIR ?= /opt/intel/mkl
-	BLAS_INCLUDE ?= $(MKL_DIR)/include
-	BLAS_LIB ?= $(MKL_DIR)/lib $(MKL_DIR)/lib/intel64
-else ifeq ($(BLAS), open)
-	# OpenBLAS
-	LIBRARIES += openblas
+ifeq ($(USE_EIGEN), 1)
+	COMMON_FLAGS += -fopenmp -DUSE_EIGEN -I ./eigen3 -std=c++11
 else
-	# ATLAS
-	ifeq ($(LINUX), 1)
-		ifeq ($(BLAS), atlas)
-			# Linux simply has cblas and atlas
-			LIBRARIES += cblas atlas
-		endif
-	else ifeq ($(OSX), 1)
-		# OS X packages atlas as the vecLib framework
-		LIBRARIES += cblas
-		# 10.10 has accelerate while 10.9 has veclib
-		XCODE_CLT_VER := $(shell pkgutil --pkg-info=com.apple.pkg.CLTools_Executables | grep -o 'version: 6')
-		ifneq (,$(findstring version: 6,$(XCODE_CLT_VER)))
-			BLAS_INCLUDE ?= /System/Library/Frameworks/Accelerate.framework/Versions/Current/Frameworks/vecLib.framework/Headers/
-			LDFLAGS += -framework Accelerate
-		else
-			BLAS_INCLUDE ?= /System/Library/Frameworks/vecLib.framework/Versions/Current/Headers/
-			LDFLAGS += -framework vecLib
+	# BLAS configuration (default = ATLAS)
+	BLAS ?= atlas
+	ifeq ($(BLAS), mkl)
+		# MKL
+		LIBRARIES += mkl_rt
+		COMMON_FLAGS += -DUSE_MKL
+		MKL_DIR ?= /opt/intel/mkl
+		BLAS_INCLUDE ?= $(MKL_DIR)/include
+		BLAS_LIB ?= $(MKL_DIR)/lib $(MKL_DIR)/lib/intel64
+	else ifeq ($(BLAS), open)
+		# OpenBLAS
+		LIBRARIES += openblas
+	else
+		# ATLAS
+		ifeq ($(LINUX), 1)
+			ifeq ($(BLAS), atlas)
+				# Linux simply has cblas and atlas
+				LIBRARIES += cblas atlas
+			endif
+		else ifeq ($(OSX), 1)
+			# OS X packages atlas as the vecLib framework
+			LIBRARIES += cblas
+			# 10.10 has accelerate while 10.9 has veclib
+			XCODE_CLT_VER := $(shell pkgutil --pkg-info=com.apple.pkg.CLTools_Executables | grep -o 'version: 6')
+			ifneq (,$(findstring version: 6,$(XCODE_CLT_VER)))
+				BLAS_INCLUDE ?= /System/Library/Frameworks/Accelerate.framework/Versions/Current/Frameworks/vecLib.framework/Headers/
+				LDFLAGS += -framework Accelerate
+			else
+				BLAS_INCLUDE ?= /System/Library/Frameworks/vecLib.framework/Versions/Current/Headers/
+				LDFLAGS += -framework vecLib
+			endif
 		endif
 	endif
+	INCLUDE_DIRS += $(BLAS_INCLUDE)
+	LIBRARY_DIRS += $(BLAS_LIB)
 endif
-INCLUDE_DIRS += $(BLAS_INCLUDE)
-LIBRARY_DIRS += $(BLAS_LIB)
 
 LIBRARY_DIRS += $(LIB_BUILD_DIR)
 
